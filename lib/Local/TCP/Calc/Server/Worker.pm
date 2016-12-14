@@ -7,7 +7,7 @@ use Mouse;
 use DDP;
 our $children;
 use POSIX ":sys_wait_h";
-
+use POSIX;
 has cur_task_id => (is => 'ro', isa => 'Int', required => 1);
 has forks       => (is => 'rw', isa => 'HashRef', default => sub {return {}});
 has calc_ref    => (is => 'ro', isa => 'CodeRef', required => 1);
@@ -56,36 +56,36 @@ sub start{
 	my $queue = shift;	
 	my $task = $queue->get($worker->{file});
 	my $iterator = 0;
+
 	my $a = ( $#$task+1 )/$worker->{max_forks};
-	my $step = sprintf("%.0f", $a);
-	while ($#$task != -1) {
-		if ($iterator > $worker->{max_forks}){
-			sleep(3);
-		}
-		else{
-			my @small_task = splice (@$task, 0, $step);
-			if (my $pid = fork) { 
-				$iterator++;
+	my $step = ceil ($a);
+	while ( $iterator < $worker->{max_forks} and $#$task != -1 ) {
+		$iterator++;
+		my @small_task = splice (@$task, 0, $step);
+		if (my $pid = fork) { 
+				
 				$children->{$pid}=1;
 				$SIG{CHLD} = \&REAPER;
 				waitpid($pid, 0);
-				$iterator--;				
+							
 			} 
-			else {
-			    die "cannot fork: $!" unless defined $pid; 
-			    my $func = $worker->{calc_ref};
-			    for my $elem (@small_task){
-				    my $result = &$func ( $elem );
-				    unless ( defined $result ){
-				    	$worker->write_err( $result ); 
-				    	die $result;
-				    }
-				   	$worker->write_res( $result );  
-				}	
-				exit(0);		
-			}
-		}	
+		else {
+		    die "cannot fork: $!" unless defined $pid; 
+		    my $func = $worker->{calc_ref};
+		    for my $elem (@small_task){
+			    my $result = &$func ( $elem );
+			    unless ( defined $result ){
+			    	$worker->write_err( $result ); 
+			    	die $result;
+			    }
+			   	$worker->write_res( $result );  
+			}	
+			exit(0);		
+		}
 	}
+
+			
+	
 
 }
 no Mouse;
